@@ -157,4 +157,35 @@ describe('Functionality', function () {
       })
     })
   })
+
+  itWithAsyncLocalStorage('should preserve async_hooks context in fileFilter and storage callbacks', function (done) {
+    var asyncLocalStorage = new asyncHooks.AsyncLocalStorage()
+    var seen = {}
+    var parser = multer({
+      storage: multer.diskStorage({
+        destination: function (req, file, cb) {
+          seen.destination = asyncLocalStorage.getStore()
+          temp.mkdir(function (err, uploadDir) { cb(err, uploadDir) })
+        },
+        filename: function (req, file, cb) {
+          seen.filename = asyncLocalStorage.getStore()
+          cb(null, file.fieldname)
+        }
+      }),
+      fileFilter: function (req, file, cb) {
+        seen.fileFilter = asyncLocalStorage.getStore()
+        cb(null, true)
+      }
+    }).single('small0')
+    var form = new FormData()
+    form.append('small0', util.file('small0.dat'))
+
+    asyncLocalStorage.run('foo', function () {
+      util.submitForm(parser, form, function (err, req) {
+        assert.ifError(err)
+        assert.deepStrictEqual(seen, { fileFilter: 'foo', destination: 'foo', filename: 'foo' })
+        rimraf(req.file.destination, done)
+      })
+    })
+  })
 })
